@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像ウォーターマークアプリ</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .container { background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        h1 { text-align: center; color: #333; }
+        form div { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="file"] { border: 1px solid #ddd; padding: 10px; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        .message { margin-top: 20px; padding: 10px; border-radius: 4px; text-align: center; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .download-link-container { margin-top: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>画像にウォーターマークを適用</h1>
+
+        <div th:if="${message}" th:classappend="${isError} ? 'error' : 'success'" class="message">
+            <p th:text="${message}"></p>
+            <div th:if="${downloadUrl}" class="download-link-container">
+                <p>ウォーターマークが適用されました。ダウンロードするには次の手順を完了してください。</p>
+            </div>
+        </div>
+
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+            <div>
+                <label for="imageFile">画像をアップロード:</label>
+                <input type="file" id="imageFile" name="imageFile" accept="image/*" required>
+            </div>
+            <button type="submit">ウォーターマークを適用</button>
+        </form>
+    </div>
+</body>
+</html>
