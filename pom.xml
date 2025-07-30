@@ -6,8 +6,7 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>3.5.4</version>
-		<relativePath/> <!-- lookup parent from repository -->
-	</parent>
+		<relativePath/> </parent>
 	<groupId>com.example</groupId>
 	<artifactId>image-watermark-app-clean</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
@@ -57,8 +56,21 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				 <configuration>
+                <mainClass>com.example.image_watermark_app_clean.ImageWatermarkAppCleanApplication</mainClass>
+            </configuration>
 			</plugin>
-		</plugins>
+           <plugin>
+    		<groupId>org.apache.maven.plugins</groupId>
+    			<artifactId>maven-compiler-plugin</artifactId>
+    			<version>3.14.0</version>
+					<configuration>
+        				<release>${java.version}</release>
+        				<fork>true</fork>
+        				<executable>/usr/local/sdkman/candidates/java/17.0.15-ms/bin/javac</executable>
+    				</configuration>
+			</plugin>
+            </plugins>
 	</build>
 
 </project>

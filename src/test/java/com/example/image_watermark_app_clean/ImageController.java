@@ -1,4 +1,4 @@
-package com.example.imagewatermarkapp;
+package com.example.image_watermark_app_clean; // ★この行を修正★
 
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
