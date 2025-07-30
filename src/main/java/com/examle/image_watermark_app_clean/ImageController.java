@@ -78,7 +78,7 @@ public class ImageController {
             g2d.drawImage(originalImage, 0, 0, null);
 
             // ウォーターマークの透明度を設定 (0.0f - 1.0f)
-            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
 
             // ウォーターマークのサイズを調整
             int scaledWatermarkWidth = (int) (watermarkImage.getWidth() * watermarkScale);
