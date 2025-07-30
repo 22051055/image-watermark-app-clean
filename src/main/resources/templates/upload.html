@@ -1,42 +1,136 @@
-<!DOCTYPE html>
-<html lang="ja" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>画像ウォーターマークアプリ</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
-        .container { background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
-        h1 { text-align: center; color: #333; }
-        form div { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="file"] { border: 1px solid #ddd; padding: 10px; border-radius: 4px; width: 100%; box-sizing: border-box; }
-        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
-        button:hover { background-color: #0056b3; }
-        .message { margin-top: 20px; padding: 10px; border-radius: 4px; text-align: center; }
-        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .download-link-container { margin-top: 20px; text-align: center; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>画像にウォーターマークを適用</h1>
+package com.example.image_watermark_app_clean;
 
-        <div th:if="${message}" th:classappend="${isError} ? 'error' : 'success'" class="message">
-            <p th:text="${message}"></p>
-            <div th:if="${downloadUrl}" class="download-link-container">
-                <p>ウォーターマークが適用されました。ダウンロードするには次の手順を完了してください。</p>
-            </div>
-        </div>
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-        <form method="POST" action="/upload" enctype="multipart/form-data">
-            <div>
-                <label for="imageFile">画像をアップロード:</label>
-                <input type="file" id="imageFile" name="imageFile" accept="image/*" required>
-            </div>
-            <button type="submit">ウォーターマークを適用</button>
-        </form>
-    </div>
-</body>
-</html>
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.awt.AlphaComposite;
+import java.util.UUID; // 追加
+import java.util.concurrent.ConcurrentHashMap; // 追加
+import java.util.Map; // 追加
+
+@Controller
+public class ImageController {
+
+    // 処理された画像を一時的に保存するためのマップ
+    // (注意: これはシンプルなデモ用であり、プロダクション環境ではファイルシステムやクラウドストレージを使用すべき)
+    private final Map<String, byte[]> processedImages = new ConcurrentHashMap<>();
+
+    @GetMapping("/")
+    public String showUploadForm(Model model) {
+        return "upload"; // upload.html を表示
+    }
+
+    @PostMapping("/upload")
+    public String handleImageUpload(@RequestParam("imageFile") MultipartFile imageFile,
+                                    RedirectAttributes redirectAttributes) {
+        if (imageFile.isEmpty()) {
+            redirectAttributes.addFlashAttribute("message", "ファイルを選択してください。");
+            redirectAttributes.addFlashAttribute("isError", true);
+            return "redirect:/";
+        }
+
+        if (!imageFile.getContentType().startsWith("image/")) {
+            redirectAttributes.addFlashAttribute("message", "画像ファイルのみアップロードできます。");
+            redirectAttributes.addFlashAttribute("isError", true);
+            return "redirect:/";
+        }
+
+        try {
+            BufferedImage originalImage = ImageIO.read(imageFile.getInputStream());
+
+            Resource watermarkResource = new ClassPathResource("static/watermark.png");
+            BufferedImage watermarkImage;
+            try (InputStream is = watermarkResource.getInputStream()) {
+                watermarkImage = ImageIO.read(is);
+            }
+
+            if (watermarkImage == null) {
+                redirectAttributes.addFlashAttribute("message", "ウォーターマーク画像を読み込めませんでした。ファイルが存在しないか、破損している可能性があります。");
+                redirectAttributes.addFlashAttribute("isError", true);
+                return "redirect:/";
+            }
+
+            BufferedImage watermarkedImage = new BufferedImage(
+                    originalImage.getWidth(), originalImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2d = (Graphics2D) watermarkedImage.getGraphics();
+            g2d.drawImage(originalImage, 0, 0, null);
+
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
+
+            int watermarkWidth = watermarkImage.getWidth();
+            int watermarkHeight = watermarkImage.getHeight();
+
+            int x = (originalImage.getWidth() - watermarkWidth) / 2;
+            int y = (originalImage.getHeight() - watermarkHeight) / 2;
+
+            g2d.drawImage(watermarkImage, x, y, null);
+            g2d.dispose();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(watermarkedImage, "png", baos); // 出力フォーマットをPNGに固定
+            byte[] imageBytes = baos.toByteArray();
+
+            // ★★★ 処理された画像をマップに保存し、ユニークなIDを生成 ★★★
+            String imageId = UUID.randomUUID().toString();
+            processedImages.put(imageId, imageBytes);
+
+            String originalFileNameWithoutExt = imageFile.getOriginalFilename().replaceFirst("[.][^.]+$", "");
+            String downloadFileName = "watermarked_" + originalFileNameWithoutExt + ".png";
+
+            redirectAttributes.addFlashAttribute("message",
+                    "ファイル「" + imageFile.getOriginalFilename() + "」にウォーターマークが適用されました！");
+            redirectAttributes.addFlashAttribute("isError", false);
+            // ダウンロードURLをフラッシュ属性で渡す
+            redirectAttributes.addFlashAttribute("downloadUrl", "/download/" + imageId + "/" + downloadFileName);
+
+
+        } catch (IOException e) {
+            redirectAttributes.addFlashAttribute("message", "画像の読み込みまたは書き込み中にエラーが発生しました: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("isError", true);
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("message", "予期せぬエラーが発生しました: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("isError", true);
+        }
+
+        return "redirect:/";
+    }
+
+    // ★★★ ダウンロード用のGETエンドポイントを完成させる ★★★
+    import org.springframework.web.bind.annotation.PathVariable; // 追加
+
+    @GetMapping("/download/{imageId}/{filename}")
+    public ResponseEntity<Resource> downloadImage(@PathVariable("imageId") String imageId,
+                                                  @PathVariable("filename") String filename) {
+        byte[] imageBytes = processedImages.get(imageId); // マップから画像データを取得
+
+        if (imageBytes == null) {
+            // 画像データが見つからない場合は404 Not Foundを返す
+            return ResponseEntity.notFound().build();
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .contentType(MediaType.parseMediaType("image/png"))
+                .body(new ByteArrayResource(imageBytes));
+    }
+}
