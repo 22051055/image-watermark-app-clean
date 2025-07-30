@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import org.springframework.web.bind.annotation.PathVariable; // 追加
+import org.springframework.web.bind.annotation.PathVariable;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -39,8 +39,12 @@ public class ImageController {
     }
 
     @PostMapping("/upload")
-    public String handleImageUpload(@RequestParam("imageFile") MultipartFile imageFile,
-                                    RedirectAttributes redirectAttributes) {
+    public String handleImageUpload(
+            @RequestParam("imageFile") MultipartFile imageFile,
+            @RequestParam(value = "watermarkPosition", defaultValue = "center") String watermarkPosition, // 追加: ウォーターマーク位置
+            @RequestParam(value = "watermarkScale", defaultValue = "0.5") float watermarkScale, // 追加: ウォーターマークサイズ (0.0 - 1.0)
+            RedirectAttributes redirectAttributes) {
+
         if (imageFile.isEmpty()) {
             redirectAttributes.addFlashAttribute("message", "ファイルを選択してください。");
             redirectAttributes.addFlashAttribute("isError", true);
@@ -73,15 +77,43 @@ public class ImageController {
             Graphics2D g2d = (Graphics2D) watermarkedImage.getGraphics();
             g2d.drawImage(originalImage, 0, 0, null);
 
+            // ウォーターマークの透明度を設定 (0.0f - 1.0f)
             g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
 
-            int watermarkWidth = watermarkImage.getWidth();
-            int watermarkHeight = watermarkImage.getHeight();
+            // ウォーターマークのサイズを調整
+            int scaledWatermarkWidth = (int) (watermarkImage.getWidth() * watermarkScale);
+            int scaledWatermarkHeight = (int) (watermarkImage.getHeight() * watermarkScale);
 
-            int x = (originalImage.getWidth() - watermarkWidth) / 2;
-            int y = (originalImage.getHeight() - watermarkHeight) / 2;
+            // ウォーターマークの描画位置を計算
+            int x = 0;
+            int y = 0;
 
-            g2d.drawImage(watermarkImage, x, y, null);
+            switch (watermarkPosition) {
+                case "topLeft":
+                    x = 0;
+                    y = 0;
+                    break;
+                case "topRight":
+                    x = originalImage.getWidth() - scaledWatermarkWidth;
+                    y = 0;
+                    break;
+                case "bottomLeft":
+                    x = 0;
+                    y = originalImage.getHeight() - scaledWatermarkHeight;
+                    break;
+                case "bottomRight":
+                    x = originalImage.getWidth() - scaledWatermarkWidth;
+                    y = originalImage.getHeight() - scaledWatermarkHeight;
+                    break;
+                case "center":
+                default:
+                    x = (originalImage.getWidth() - scaledWatermarkWidth) / 2;
+                    y = (originalImage.getHeight() - scaledWatermarkHeight) / 2;
+                    break;
+            }
+
+            // 調整されたサイズと位置でウォーターマーク画像を描画
+            g2d.drawImage(watermarkImage, x, y, scaledWatermarkWidth, scaledWatermarkHeight, null);
             g2d.dispose();
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -94,27 +126,24 @@ public class ImageController {
             String originalFileNameWithoutExt = imageFile.getOriginalFilename().replaceFirst("[.][^.]+$", "");
             String downloadFileName = "watermarked_" + originalFileNameWithoutExt + ".png";
 
-            String generatedDownloadUrl = "/download/" + imageId + "/" + downloadFileName; // 生成されるURL
+            String generatedDownloadUrl = "/download/" + imageId + "/" + downloadFileName;
 
-            // ★★★ ここにデバッグログを追加 ★★★
             System.out.println("Generated Image ID: " + imageId);
             System.out.println("Generated Download File Name: " + downloadFileName);
             System.out.println("Generated Download URL: " + generatedDownloadUrl);
 
-
             redirectAttributes.addFlashAttribute("message",
                     "ファイル「" + imageFile.getOriginalFilename() + "」にウォーターマークが適用されました！");
             redirectAttributes.addFlashAttribute("isError", false);
-            redirectAttributes.addFlashAttribute("downloadUrl", generatedDownloadUrl); // 生成されたURLを渡す
-
+            redirectAttributes.addFlashAttribute("downloadUrl", generatedDownloadUrl);
 
         } catch (IOException e) {
-            System.err.println("IOException during image processing: " + e.getMessage()); // エラーログ
+            System.err.println("IOException during image processing: " + e.getMessage());
             redirectAttributes.addFlashAttribute("message", "画像の読み込みまたは書き込み中にエラーが発生しました: " + e.getMessage());
             redirectAttributes.addFlashAttribute("isError", true);
         } catch (Exception e) {
-            System.err.println("Unexpected Exception during image processing: " + e.getMessage()); // エラーログ
-            e.printStackTrace(); // スタックトレースも出力
+            System.err.println("Unexpected Exception during image processing: " + e.getMessage());
+            e.printStackTrace();
             redirectAttributes.addFlashAttribute("message", "予期せぬエラーが発生しました: " + e.getMessage());
             redirectAttributes.addFlashAttribute("isError", true);
         }
@@ -125,12 +154,12 @@ public class ImageController {
     @GetMapping("/download/{imageId}/{filename}")
     public ResponseEntity<Resource> downloadImage(@PathVariable("imageId") String imageId,
                                                   @PathVariable("filename") String filename) {
-        System.out.println("Download request received for Image ID: " + imageId + " and filename: " + filename); // デバッグログ
+        System.out.println("Download request received for Image ID: " + imageId + " and filename: " + filename);
 
         byte[] imageBytes = processedImages.get(imageId);
 
         if (imageBytes == null) {
-            System.err.println("Image data not found for ID: " + imageId); // エラーログ
+            System.err.println("Image data not found for ID: " + imageId);
             return ResponseEntity.notFound().build();
         }
 
