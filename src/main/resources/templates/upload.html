@@ -65,8 +65,8 @@
 
         <form method="POST" action="/upload" enctype="multipart/form-data">
             <div>
-                <label for="imageFile">画像をアップロード:</label>
-                <input type="file" id="imageFile" name="imageFile" accept="image/*" required>
+                <label for="imageFiles">画像をアップロード (複数選択可):</label>
+                <input type="file" id="imageFiles" name="imageFiles" accept="image/*" multiple required> <!-- multiple 属性を追加 -->
             </div>
             <div>
                 <label for="watermarkPosition">ウォーターマークの位置:</label>
@@ -83,7 +83,6 @@
                 <input type="range" id="watermarkScale" name="watermarkScale" min="0.1" max="1.0" step="0.1" value="0.5" oninput="this.nextElementSibling.value=this.value">
                 <output class="slider-value">0.5</output>
             </div>
-            <!-- ★★★ ウォーターマークの色選択を追加 ★★★ -->
             <div class="radio-group">
                 <label>ウォーターマークの色:</label><br>
                 <label>
@@ -112,3 +111,4 @@
     </script>
 </body>
 </html>
+
