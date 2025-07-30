@@ -39,6 +39,8 @@
 
         <div th:if="${message}" th:classappend="${isError} ? 'error' : 'success'" class="message">
             <p th:text="${message}"></p>
+            <!-- デバッグ用: downloadUrl の値を確認 -->
+            <p>ダウンロードURLの状態: <span th:text="${downloadUrl != null ? downloadUrl : 'null'}"></span></p>
             <!-- ダウンロードリンクの表示 (修正部分) -->
             <div th:if="${downloadUrl}" class="download-link-container">
                 <a th:href="${downloadUrl}" class="download-button" download>ウォーターマーク付き画像をダウンロード</a>
