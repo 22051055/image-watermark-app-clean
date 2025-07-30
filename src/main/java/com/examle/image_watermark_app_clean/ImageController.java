@@ -25,13 +25,15 @@ import java.awt.AlphaComposite;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
-import java.util.List; // 追加
-import java.util.zip.ZipEntry; // 追加
-import java.util.zip.ZipOutputStream; // 追加
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Controller
 public class ImageController {
 
+    // 処理された単一画像を一時的に保存するためのマップ
+    private final Map<String, byte[]> processedImages = new ConcurrentHashMap<>();
     // 処理されたZIPファイルを一時的に保存するためのマップ
     private final Map<String, byte[]> processedZipFiles = new ConcurrentHashMap<>();
 
@@ -42,7 +44,7 @@ public class ImageController {
 
     @PostMapping("/upload")
     public String handleImageUpload(
-            @RequestParam("imageFiles") List<MultipartFile> imageFiles, // 複数ファイルを受け取るように変更
+            @RequestParam("imageFiles") List<MultipartFile> imageFiles,
             @RequestParam(value = "watermarkPosition", defaultValue = "center") String watermarkPosition,
             @RequestParam(value = "watermarkScale", defaultValue = "0.5") float watermarkScale,
             @RequestParam(value = "watermarkColor", defaultValue = "black") String watermarkColor,
@@ -54,9 +56,7 @@ public class ImageController {
             return "redirect:/";
         }
 
-        try (ByteArrayOutputStream zipBaos = new ByteArrayOutputStream();
-             ZipOutputStream zos = new ZipOutputStream(zipBaos)) {
-
+        try {
             // ウォーターマーク画像のパスを決定
             String watermarkImagePath;
             if ("white".equalsIgnoreCase(watermarkColor)) {
@@ -77,18 +77,17 @@ public class ImageController {
                 return "redirect:/";
             }
 
-            // 各画像を処理し、ZIPに追加
-            for (MultipartFile imageFile : imageFiles) {
-                if (imageFile.isEmpty()) {
-                    continue; // 空のファイルはスキップ
-                }
-                if (!imageFile.getContentType().startsWith("image/")) {
-                    // 個別のファイルエラーはログに記録し、処理を続行
-                    System.err.println("Skipping non-image file: " + imageFile.getOriginalFilename());
-                    continue;
+            // ★★★ ファイル数による処理の分岐 ★★★
+            if (imageFiles.size() == 1) {
+                // 単一ファイルの処理
+                MultipartFile singleImageFile = imageFiles.get(0);
+                if (!singleImageFile.getContentType().startsWith("image/")) {
+                    redirectAttributes.addFlashAttribute("message", "画像ファイルのみアップロードできます。");
+                    redirectAttributes.addFlashAttribute("isError", true);
+                    return "redirect:/";
                 }
 
-                BufferedImage originalImage = ImageIO.read(imageFile.getInputStream());
+                BufferedImage originalImage = ImageIO.read(singleImageFile.getInputStream());
                 BufferedImage watermarkedImage = new BufferedImage(
                         originalImage.getWidth(), originalImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
                 Graphics2D g2d = (Graphics2D) watermarkedImage.getGraphics();
@@ -131,29 +130,108 @@ public class ImageController {
 
                 ByteArrayOutputStream imageBaos = new ByteArrayOutputStream();
                 ImageIO.write(watermarkedImage, "png", imageBaos); // 出力フォーマットをPNGに固定
+                byte[] imageBytes = imageBaos.toByteArray();
 
-                // ZIPエントリを追加
-                String originalFileNameWithoutExt = imageFile.getOriginalFilename().replaceFirst("[.][^.]+$", "");
-                String zipEntryFileName = "watermarked_" + originalFileNameWithoutExt + ".png";
-                zos.putNextEntry(new ZipEntry(zipEntryFileName));
-                zos.write(imageBaos.toByteArray());
-                zos.closeEntry();
+                // 単一画像をマップに保存
+                String imageId = UUID.randomUUID().toString();
+                processedImages.put(imageId, imageBytes);
+
+                String originalFileNameWithoutExt = singleImageFile.getOriginalFilename().replaceFirst("[.][^.]+$", "");
+                String downloadFileName = "watermarked_" + originalFileNameWithoutExt + ".png";
+                String generatedDownloadUrl = "/download/" + imageId + "/" + downloadFileName;
+
+                System.out.println("Single Image Generated ID: " + imageId);
+                System.out.println("Single Image Generated Download URL: " + generatedDownloadUrl);
+
+                redirectAttributes.addFlashAttribute("message",
+                        "ファイル「" + singleImageFile.getOriginalFilename() + "」にウォーターマークが適用されました！");
+                redirectAttributes.addFlashAttribute("isError", false);
+                redirectAttributes.addFlashAttribute("downloadUrl", generatedDownloadUrl);
+
+            } else {
+                // 複数ファイルの処理 (ZIP化)
+                try (ByteArrayOutputStream zipBaos = new ByteArrayOutputStream();
+                     ZipOutputStream zos = new ZipOutputStream(zipBaos)) {
+
+                    for (MultipartFile imageFile : imageFiles) {
+                        if (imageFile.isEmpty()) {
+                            continue;
+                        }
+                        if (!imageFile.getContentType().startsWith("image/")) {
+                            System.err.println("Skipping non-image file: " + imageFile.getOriginalFilename());
+                            continue;
+                        }
+
+                        BufferedImage originalImage = ImageIO.read(imageFile.getInputStream());
+                        BufferedImage watermarkedImage = new BufferedImage(
+                                originalImage.getWidth(), originalImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                        Graphics2D g2d = (Graphics2D) watermarkedImage.getGraphics();
+                        g2d.drawImage(originalImage, 0, 0, null);
+
+                        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+
+                        int scaledWatermarkWidth = (int) (watermarkImage.getWidth() * watermarkScale);
+                        int scaledWatermarkHeight = (int) (watermarkImage.getHeight() * watermarkScale);
+
+                        int x = 0;
+                        int y = 0;
+
+                        switch (watermarkPosition) {
+                            case "topLeft":
+                                x = 0;
+                                y = 0;
+                                break;
+                            case "topRight":
+                                x = originalImage.getWidth() - scaledWatermarkWidth;
+                                y = 0;
+                                break;
+                            case "bottomLeft":
+                                x = 0;
+                                y = originalImage.getHeight() - scaledWatermarkHeight;
+                                break;
+                            case "bottomRight":
+                                x = originalImage.getWidth() - scaledWatermarkWidth;
+                                y = originalImage.getHeight() - scaledWatermarkHeight;
+                                break;
+                            case "center":
+                            default:
+                                x = (originalImage.getWidth() - scaledWatermarkWidth) / 2;
+                                y = (originalImage.getHeight() - scaledWatermarkHeight) / 2;
+                                break;
+                        }
+
+                        g2d.drawImage(watermarkImage, x, y, scaledWatermarkWidth, scaledWatermarkHeight, null);
+                        g2d.dispose();
+
+                        ByteArrayOutputStream imageBaos = new ByteArrayOutputStream();
+                        ImageIO.write(watermarkedImage, "png", imageBaos);
+
+                        String originalFileNameWithoutExt = imageFile.getOriginalFilename().replaceFirst("[.][^.]+$", "");
+                        String zipEntryFileName = "watermarked_" + originalFileNameWithoutExt + ".png";
+                        zos.putNextEntry(new ZipEntry(zipEntryFileName));
+                        zos.write(imageBaos.toByteArray());
+                        zos.closeEntry();
+                    }
+
+                    zos.finish();
+
+                    byte[] zipBytes = zipBaos.toByteArray();
+
+                    // 処理されたZIPファイルをマップに保存
+                    String zipId = UUID.randomUUID().toString();
+                    processedZipFiles.put(zipId, zipBytes);
+
+                    String generatedDownloadUrl = "/download-zip/" + zipId + "/watermarked_images.zip";
+
+                    System.out.println("ZIP Generated ID: " + zipId);
+                    System.out.println("ZIP Generated Download URL: " + generatedDownloadUrl);
+
+                    redirectAttributes.addFlashAttribute("message",
+                            imageFiles.size() + "個の画像にウォーターマークが適用され、ZIPファイルが準備されました！");
+                    redirectAttributes.addFlashAttribute("isError", false);
+                    redirectAttributes.addFlashAttribute("downloadUrl", generatedDownloadUrl);
+                }
             }
-
-            zos.finish(); // ZIPファイルの構築を完了
-
-            byte[] zipBytes = zipBaos.toByteArray();
-
-            // 処理されたZIPファイルをマップに保存
-            String zipId = UUID.randomUUID().toString();
-            processedZipFiles.put(zipId, zipBytes);
-
-            String downloadUrl = "/download-zip/" + zipId + "/watermarked_images.zip";
-
-            redirectAttributes.addFlashAttribute("message",
-                    imageFiles.size() + "個の画像にウォーターマークが適用され、ZIPファイルが準備されました！");
-            redirectAttributes.addFlashAttribute("isError", false);
-            redirectAttributes.addFlashAttribute("downloadUrl", downloadUrl);
 
         } catch (IOException e) {
             System.err.println("IOException during image processing or ZIP creation: " + e.getMessage());
@@ -170,11 +248,33 @@ public class ImageController {
         return "redirect:/";
     }
 
+    // 単一画像ダウンロード用のGETエンドポイント
+    @GetMapping("/download/{imageId}/{filename}")
+    public ResponseEntity<Resource> downloadImage(@PathVariable("imageId") String imageId,
+                                                  @PathVariable("filename") String filename) {
+        System.out.println("Single Image Download request received for Image ID: " + imageId + " and filename: " + filename);
+
+        byte[] imageBytes = processedImages.get(imageId);
+
+        if (imageBytes == null) {
+            System.err.println("Single Image data not found for ID: " + imageId);
+            return ResponseEntity.notFound().build();
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .contentType(MediaType.parseMediaType("image/png")) // PNGとしてダウンロード
+                .body(new ByteArrayResource(imageBytes));
+    }
+
     // ZIPファイルダウンロード用のGETエンドポイント
     @GetMapping("/download-zip/{zipId}/{filename}")
     public ResponseEntity<Resource> downloadZip(@PathVariable("zipId") String zipId,
                                                 @PathVariable("filename") String filename) {
-        System.out.println("Download ZIP request received for ZIP ID: " + zipId + " and filename: " + filename);
+        System.out.println("ZIP Download request received for ZIP ID: " + zipId + " and filename: " + filename);
 
         byte[] zipBytes = processedZipFiles.get(zipId);
 
@@ -191,12 +291,4 @@ public class ImageController {
                 .contentType(MediaType.parseMediaType("application/zip")) // ZIPファイルとして返す
                 .body(new ByteArrayResource(zipBytes));
     }
-
-    // 単一画像ダウンロード用のエンドポイントは不要になるため削除（またはコメントアウト）
-    // @GetMapping("/download/{imageId}/{filename}")
-    // public ResponseEntity<Resource> downloadImage(@PathVariable("imageId") String imageId,
-    //                                               @PathVariable("filename") String filename) {
-    //     // このエンドポイントは複数ファイルアップロード機能では使用されません
-    //     return ResponseEntity.notFound().build();
-    // }
 }
