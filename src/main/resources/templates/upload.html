@@ -10,7 +10,7 @@
         h1 { text-align: center; color: #333; }
         form div { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="file"] { border: 1px solid #ddd; padding: 10px; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        input[type="file"], select, input[type="range"] { border: 1px solid #ddd; padding: 10px; border-radius: 4px; width: 100%; box-sizing: border-box; }
         button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
         button:hover { background-color: #0056b3; }
         .message { margin-top: 20px; padding: 10px; border-radius: 4px; text-align: center; }
@@ -31,6 +31,22 @@
         .download-button:hover {
             background-color: #218838;
         }
+        .slider-value {
+            text-align: right;
+            font-size: 0.9em;
+            color: #555;
+            margin-top: -10px;
+            margin-bottom: 5px;
+        }
+        .radio-group label {
+            display: inline-block;
+            margin-right: 15px;
+            font-weight: normal;
+        }
+        .radio-group input[type="radio"] {
+            width: auto;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -41,7 +57,7 @@
             <p th:text="${message}"></p>
             <!-- デバッグ用: downloadUrl の値を確認 -->
             <p>ダウンロードURLの状態: <span th:text="${downloadUrl != null ? downloadUrl : 'null'}"></span></p>
-            <!-- ダウンロードリンクの表示 (修正部分) -->
+            <!-- ダウンロードリンクの表示 -->
             <div th:if="${downloadUrl}" class="download-link-container">
                 <a th:href="${downloadUrl}" class="download-button" download>ウォーターマーク付き画像をダウンロード</a>
             </div>
@@ -52,8 +68,47 @@
                 <label for="imageFile">画像をアップロード:</label>
                 <input type="file" id="imageFile" name="imageFile" accept="image/*" required>
             </div>
+            <div>
+                <label for="watermarkPosition">ウォーターマークの位置:</label>
+                <select id="watermarkPosition" name="watermarkPosition">
+                    <option value="center">中央</option>
+                    <option value="topLeft">左上</option>
+                    <option value="topRight">右上</option>
+                    <option value="bottomLeft">左下</option>
+                    <option value="bottomRight">右下</option>
+                </select>
+            </div>
+            <div>
+                <label for="watermarkScale">ウォーターマークのサイズ (0.1 - 1.0):</label>
+                <input type="range" id="watermarkScale" name="watermarkScale" min="0.1" max="1.0" step="0.1" value="0.5" oninput="this.nextElementSibling.value=this.value">
+                <output class="slider-value">0.5</output>
+            </div>
+            <!-- ★★★ ウォーターマークの色選択を追加 ★★★ -->
+            <div class="radio-group">
+                <label>ウォーターマークの色:</label><br>
+                <label>
+                    <input type="radio" name="watermarkColor" value="black" checked> 黒
+                </label>
+                <label>
+                    <input type="radio" name="watermarkColor" value="white"> 白
+                </label>
+            </div>
             <button type="submit">ウォーターマークを適用</button>
         </form>
     </div>
+
+    <script>
+        // スライダーの値をリアルタイムで表示
+        const slider = document.getElementById('watermarkScale');
+        const output = slider.nextElementSibling; // output要素を取得
+
+        // ページロード時に初期値を設定
+        output.value = slider.value;
+
+        // スライダーが動いたときに値を更新
+        slider.oninput = function() {
+            output.value = this.value;
+        }
+    </script>
 </body>
 </html>

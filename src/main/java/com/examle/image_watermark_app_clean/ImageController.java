@@ -41,8 +41,9 @@ public class ImageController {
     @PostMapping("/upload")
     public String handleImageUpload(
             @RequestParam("imageFile") MultipartFile imageFile,
-            @RequestParam(value = "watermarkPosition", defaultValue = "center") String watermarkPosition, // 追加: ウォーターマーク位置
-            @RequestParam(value = "watermarkScale", defaultValue = "0.5") float watermarkScale, // 追加: ウォーターマークサイズ (0.0 - 1.0)
+            @RequestParam(value = "watermarkPosition", defaultValue = "center") String watermarkPosition, // ウォーターマーク位置
+            @RequestParam(value = "watermarkScale", defaultValue = "0.5") float watermarkScale, // ウォーターマークサイズ (0.0 - 1.0)
+            @RequestParam(value = "watermarkColor", defaultValue = "black") String watermarkColor, // 追加: ウォーターマーク色 (white/black)
             RedirectAttributes redirectAttributes) {
 
         if (imageFile.isEmpty()) {
@@ -60,14 +61,22 @@ public class ImageController {
         try {
             BufferedImage originalImage = ImageIO.read(imageFile.getInputStream());
 
-            Resource watermarkResource = new ClassPathResource("static/watermark.png");
+            // ★★★ ウォーターマーク画像を色選択に基づいて読み込む部分 ★★★
+            String watermarkImagePath;
+            if ("white".equalsIgnoreCase(watermarkColor)) {
+                watermarkImagePath = "static/watermark_white.png";
+            } else {
+                watermarkImagePath = "static/watermark_black.png"; // デフォルトは黒
+            }
+
+            Resource watermarkResource = new ClassPathResource(watermarkImagePath);
             BufferedImage watermarkImage;
             try (InputStream is = watermarkResource.getInputStream()) {
                 watermarkImage = ImageIO.read(is);
             }
 
             if (watermarkImage == null) {
-                redirectAttributes.addFlashAttribute("message", "ウォーターマーク画像を読み込めませんでした。ファイルが存在しないか、破損している可能性があります。");
+                redirectAttributes.addFlashAttribute("message", "ウォーターマーク画像を読み込めませんでした。ファイルが存在しないか、破損している可能性があります。(" + watermarkImagePath + ")");
                 redirectAttributes.addFlashAttribute("isError", true);
                 return "redirect:/";
             }
@@ -78,7 +87,7 @@ public class ImageController {
             g2d.drawImage(originalImage, 0, 0, null);
 
             // ウォーターマークの透明度を設定 (0.0f - 1.0f)
-            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f)); // 完全に不透明
 
             // ウォーターマークのサイズを調整
             int scaledWatermarkWidth = (int) (watermarkImage.getWidth() * watermarkScale);
